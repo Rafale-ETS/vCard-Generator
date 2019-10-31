@@ -3,14 +3,17 @@ package rafale.vcard.gen;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
-import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import io.nayuki.qrcodegen.*;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontFormatException;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.util.List;
 import javax.imageio.ImageIO;
 
 /**
@@ -19,6 +22,9 @@ import javax.imageio.ImageIO;
  */
 public class MainWindow extends javax.swing.JFrame {
 
+    static FontLoader arimoLoader;
+    static FontLoader swz721Loader;
+    
     /**
      * Creates new form MainWindow
      */
@@ -43,13 +49,13 @@ public class MainWindow extends javax.swing.JFrame {
         jLabel3 = new javax.swing.JLabel();
         jLabel4 = new javax.swing.JLabel();
         emailField = new javax.swing.JTextField();
-        jLabel5 = new javax.swing.JLabel();
         jLabel7 = new javax.swing.JLabel();
         jobField = new javax.swing.JTextField();
         jLabel8 = new javax.swing.JLabel();
         phoneField = new javax.swing.JFormattedTextField();
         clearBtn = new javax.swing.JButton();
         generateQRFile = new javax.swing.JCheckBox();
+        SubOrgBox = new javax.swing.JComboBox<>();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -80,8 +86,6 @@ public class MainWindow extends javax.swing.JFrame {
         emailField.setText("ab12345");
         emailField.setToolTipText("ab12345");
 
-        jLabel5.setText("@ens.etsmtl.ca");
-
         jLabel7.setFont(new java.awt.Font("Tahoma", 0, 14)); // NOI18N
         jLabel7.setText("Generateur de vCard pour Rafale");
 
@@ -104,6 +108,13 @@ public class MainWindow extends javax.swing.JFrame {
         });
 
         generateQRFile.setText("Generer le code QR independant");
+
+        SubOrgBox.setModel(new javax.swing.DefaultComboBoxModel<>(VCard.getSubOrgs()));
+        SubOrgBox.addPropertyChangeListener(new java.beans.PropertyChangeListener() {
+            public void propertyChange(java.beans.PropertyChangeEvent evt) {
+                SubOrgBoxPropertyChange(evt);
+            }
+        });
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
@@ -139,7 +150,7 @@ public class MainWindow extends javax.swing.JFrame {
                                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                                         .addComponent(emailField, javax.swing.GroupLayout.PREFERRED_SIZE, 83, javax.swing.GroupLayout.PREFERRED_SIZE)
                                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                        .addComponent(jLabel5, javax.swing.GroupLayout.PREFERRED_SIZE, 83, javax.swing.GroupLayout.PREFERRED_SIZE)))))
+                                        .addComponent(SubOrgBox, javax.swing.GroupLayout.PREFERRED_SIZE, 100, javax.swing.GroupLayout.PREFERRED_SIZE)))))
                         .addGap(20, 20, 20))
                     .addGroup(layout.createSequentialGroup()
                         .addComponent(generateQRFile)
@@ -169,9 +180,9 @@ public class MainWindow extends javax.swing.JFrame {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(emailField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jLabel5)
-                    .addComponent(jLabel4))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 11, Short.MAX_VALUE)
+                    .addComponent(jLabel4)
+                    .addComponent(SubOrgBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 9, Short.MAX_VALUE)
                 .addComponent(generateQRFile)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
@@ -191,7 +202,11 @@ public class MainWindow extends javax.swing.JFrame {
         //TODO: check for unfilled fields
 
         //Generate vCard
-        VCard vCard = new VCard(nameField.getText(), surnameField.getText(), phoneField.getText().replaceAll("\\(|\\)|-| ", ""), emailField.getText(), jobField.getText());
+        VCard vCard;
+        if(SubOrgBox.getSelectedItem() == VCard.emailMcGillEnd)
+            vCard = new VCard(nameField.getText(), surnameField.getText(), phoneField.getText().replaceAll("\\(|\\)|-| ", ""), VCard.SubOrg.MCGILL, emailField.getText(), jobField.getText());
+        else
+            vCard = new VCard(nameField.getText(), surnameField.getText(), phoneField.getText().replaceAll("\\(|\\)|-| ", ""), VCard.SubOrg.ETS, emailField.getText(), jobField.getText());
         
         File vFile = new File(vCard.getName()+"_"+vCard.getSurname()+"_vCard.vcr");
         BufferedWriter writer = null;
@@ -208,8 +223,9 @@ public class MainWindow extends javax.swing.JFrame {
             }
         }
         
-        QrCode vQR = QrCode.encodeText(vCard.getAsString(), QrCode.Ecc.LOW);
-        BufferedImage vQRImg = vQR.toImage(8, 0);
+        List<QrSegment> segs = QrSegment.makeSegments(vCard.getAsString());
+        QrCode vQR = QrCode.encodeSegments(segs, QrCode.Ecc.LOW, 11, 11, -1, true);
+        BufferedImage vQRImg = vQR.toImage(8, 2);
         
         if(generateQRFile.isSelected()){
             try {
@@ -219,32 +235,37 @@ public class MainWindow extends javax.swing.JFrame {
             }
         }
         
-        BufferedImage vCardPng = null;
         try {
-            vCardPng = ImageIO.read(new File("vCard_Master.png"));
-            Graphics2D vGrap = vCardPng.createGraphics();
-            vGrap.drawImage(vQRImg, null, 32, 90);
             
-            Font fontBig = new Font("Agency FB", Font.BOLD, 56);
-            Font fontMedBold = new Font("Agency FB", Font.BOLD, 46);
-            Font fontMed = new Font("Agency FB", Font.BOLD, 36);
-            Font fontSmall = new Font("Agency FB", Font.BOLD, 30);
+            BufferedImage vCardPng = ImageIO.read(new File("res/vCard_Master.png"));
+            Graphics2D vGrap = vCardPng.createGraphics();
+            vGrap.drawImage(vQRImg, null, 70, 70);
+            
+            Font name = swz721Loader.getFont(Font.PLAIN, 50);
+            Font infos = arimoLoader.getFont(Font.PLAIN, 50);
                                     
+            int margin = 80;
+            int cardSize = vCardPng.getWidth();
+            
             vGrap.setPaint(Color.BLACK);
             
-            vGrap.setFont(fontBig);
-            vGrap.drawString(vCard.getSurname(), 543, 121);
-            vGrap.drawString(vCard.getName(), 543, 182);
+            vGrap.setFont(name);
+            String nameStr = (vCard.getSurname()+" "+vCard.getName()).toUpperCase();
+            vGrap.drawString(nameStr, cardSize - (vGrap.getFontMetrics().stringWidth(nameStr) + margin), 415 + vGrap.getFontMetrics().getHeight());
             
-            vGrap.setFont(fontMedBold);
-            vGrap.drawString(vCard.getOrganism(), 543, 298);
-            
-            vGrap.setFont(fontSmall);
-            vGrap.drawString(vCard.getJob(), 543, 251);
-            
-            vGrap.setFont(fontMed);
-            vGrap.drawString(vCard.getEmail(), 543, 385);
-            vGrap.drawString(vCard.getFormatedPhone(), 543, 439);
+            vGrap.setFont(infos);
+            String jobStr = vCard.getJob();
+            String emailStr = "Courriel: "+vCard.getEmail();
+            String phoneStr;
+            if(!vCard.getFormatedPhone().equals(""))
+                phoneStr = "Téléphone: "+vCard.getFormatedPhone();
+            else 
+                phoneStr = "";
+            String websiteStr = "Site Internet: "+vCard.getWebsite();
+            vGrap.drawString(jobStr, cardSize - (vGrap.getFontMetrics().stringWidth(jobStr) + margin), 509 + vGrap.getFontMetrics().getHeight());
+            vGrap.drawString(emailStr, cardSize - (vGrap.getFontMetrics().stringWidth(emailStr) + margin), 593 + vGrap.getFontMetrics().getHeight());
+            vGrap.drawString(phoneStr, cardSize - (vGrap.getFontMetrics().stringWidth(phoneStr) + margin), 675 + vGrap.getFontMetrics().getHeight());
+            vGrap.drawString(websiteStr, cardSize - (vGrap.getFontMetrics().stringWidth(websiteStr) + margin), 759 + vGrap.getFontMetrics().getHeight());
             
             ImageIO.write(vCardPng, "png", new File(vCard.getName()+"_"+vCard.getSurname()+"_vCard.png"));
         } catch (IOException ex) {
@@ -261,10 +282,25 @@ public class MainWindow extends javax.swing.JFrame {
         jobField.setText("");
     }//GEN-LAST:event_clearBtnActionPerformed
 
+    private void SubOrgBoxPropertyChange(java.beans.PropertyChangeEvent evt) {//GEN-FIRST:event_SubOrgBoxPropertyChange
+        // TODO add your handling code here:
+    }//GEN-LAST:event_SubOrgBoxPropertyChange
+
     /**
      * @param args the command line arguments
      */
     public static void main(String args[]) {
+        
+        //Seting up fonts for use later.
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        try {
+            
+            arimoLoader = new FontLoader("res/Arimo-Regular.ttf");
+            swz721Loader = new FontLoader("res/swz721k.ttf");
+        } catch (FontFormatException | IOException ex) {
+            Logger.getLogger(MainWindow.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        
         /* Set the Nimbus look and feel */
         //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
         /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
@@ -298,6 +334,7 @@ public class MainWindow extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JComboBox<String> SubOrgBox;
     private javax.swing.JButton clearBtn;
     private javax.swing.JTextField emailField;
     private javax.swing.JButton generateBtn;
@@ -306,7 +343,6 @@ public class MainWindow extends javax.swing.JFrame {
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
     private javax.swing.JLabel jLabel4;
-    private javax.swing.JLabel jLabel5;
     private javax.swing.JLabel jLabel7;
     private javax.swing.JLabel jLabel8;
     private javax.swing.JTextField jobField;

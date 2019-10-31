@@ -11,7 +11,6 @@ package rafale.vcard.gen;
  */
 public class VCard {
     
-    private static int sOrgNB = 2;
     public static enum SubOrg{
         ETS,
         MCGILL,
